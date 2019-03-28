@@ -1,0 +1,28 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build ranbuffer-debug",
+            "type": "shell",
+            "command": "gmake",
+            "args": [
+                "ranbuffer-debug"
+            ],
+        },
+        {
+            "label": "build ranbuffer",
+            "type": "shell",
+            "command": "gmake",
+            "args": [
+                "ranbuffer"
+            ]
+        },
+        {
+            "label": "format C code",
+            "type": "shell",
+            "command": "clang-format -i -style=mozilla ${file}"
+        }
+    ]
+}

@@ -11,12 +11,7 @@
 #include <unistd.h>
 
 #include <sodium.h>
-
-#ifdef __gnu_linux__
 #include <uuid/uuid.h>
-#elif __APPLE__
-#include <uuid/uuid.h>
-#endif
 
 #ifndef NUM_THREADS
 #define NUM_THREADS 4
@@ -44,22 +39,22 @@ extern ssize_t
 string_to_bytes(const char* arg);
 static const char*
 random_filename(char* name, size_t len);
-static ssize_t
+ssize_t
 generate_file(char* path, void* buf, size_t bufsz, size_t nbytes);
 
 static const char*
 random_filename(char* name, size_t len)
 {
   uuid_t uu;
-#ifdef __APPLE__
+#if defined __APPLE__
   uuid_string_t uu_str;
   uuid_string_t p_name;
-#elif __gnu_linux__
+#elif defined (__sun) || defined (__gnu_linux__)
   char uu_str[UUID_BYTES];
   char p_name[UUID_BYTES];
 #endif
   uuid_generate_random(uu);
-#ifdef __gnu_linux__
+#if defined (__sun) || defined (__gnu_linux__)
   uuid_unparse_lower(uu, (char*)uu_str);
   strncpy(p_name, (const char*)uu_str, len);
 #else
@@ -84,8 +79,13 @@ io_thread(void* arg)
 {
   thread_data_t* td = (thread_data_t*)arg;
   char* path = malloc(pathconf(td->directory, _PC_PATH_MAX) * sizeof(char));
+  if (path == NULL) {
+    fprintf(stderr,
+      "thread[%u] Failed to allocate path, " \
+      "directory name may not exist\n", td->suffix);
+      return NULL;
+  }
   char name[37];
-  // size_t generated = 0;
   uint32_t r;
   td->file_count = 0;
   td->written = 0;
@@ -119,56 +119,6 @@ io_thread(void* arg)
   return arg;
 }
 
-static ssize_t
-generate_file(char* path, void* buf, size_t bufsz, size_t nbytes)
-{
-  int fd;
-  mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-  int oflag = O_WRONLY | O_CREAT | O_APPEND;
-
-  if (path == NULL) {
-    return -1;
-  }
-
-  // Check if parent directory is a valid path, and fail if it is not.
-  char* pathcopy = strdup(path);
-  DIR* dir;
-  if ((dir = opendir(dirname(pathcopy))) == NULL) {
-    char* err;
-    asprintf(&err, "Failed to open parent directory %s", pathcopy);
-    perror(err);
-    free(err);
-    free(pathcopy);
-    return -1;
-  } else {
-    closedir(dir);
-    free(pathcopy);
-  }
-
-  if ((fd = open(path, oflag, mode)) == -1) {
-    perror("Failed to open file");
-    return -1;
-  };
-  ssize_t written = 0;
-  size_t remainder = nbytes;
-
-  while (remainder > 0) {
-    // Write either bufsize bytes or remainder bytes to the file, if remainder
-    // is less than the size of buffer.
-    ssize_t result = write(fd, buf, bufsz > remainder ? remainder : bufsz);
-    if (result == -1) {
-      char* err;
-      asprintf(&err, "Failed to write buffer to %s", path);
-      perror(err);
-      free(err);
-      return -1;
-    }
-    written += result;
-    remainder = nbytes - written;
-  }
-  return written;
-}
-
 int
 main(int argc, char** argv)
 {
@@ -178,7 +128,7 @@ main(int argc, char** argv)
   size_t max_file = min_file * 10;
   double margin_of_error = 0.05;
   char* path = NULL;
-
+  int retcode = 0;
   int c;
   opterr = 0;
   while ((c = getopt(argc, argv, ":hm:t:")) != EOF) {
@@ -291,23 +241,29 @@ main(int argc, char** argv)
   }
 
   for (size_t i = 0; i < NUM_THREADS; i++) {
-    pthread_join(*threads[i], NULL);
-  }
-
-  // One day freeing these may actually matter.
-  free(buf);
-
-  // Produce final statistics and free resources,
-  // though freeing here does not really matter.
-  for (size_t i = 0; i < NUM_THREADS; i++) {
+    void *arg = NULL;
+    pthread_join(*threads[i], &arg);
+    // If arg here is NULL, something went wrong in the thread.
+    // In this instance set return code to 1 to indicate program
+    // is partially successful or entirely unsuccessful.
+    if (arg == NULL) {
+      retcode = 1;
+      continue;
+    }
+    // Produce final statistics and free resources,
+    // though freeing here does not really matter.
     printf("thread[%zu] generated %zu files, averaging %zuMB/file\n",
-           i,
-           params[i]->file_count,
-           (params[i]->written / params[i]->file_count) >> 20);
+        i,
+        params[i]->file_count,
+        (params[i]->written / params[i]->file_count) >> 20);
     free(params[i]);
     free(threads[i]);
   }
+
+  // One day freeing these may actually matter.
   free(params);
   free(threads);
-  return 0;
+  free(buf);
+
+  return retcode;
 }
