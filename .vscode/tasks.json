@@ -20,6 +20,14 @@
             ]
         },
         {
+            "label": "clean",
+            "type": "shell",
+            "command": "gmake",
+            "args": [
+                "clean"
+            ],
+        },
+        {
             "label": "format C code",
             "type": "shell",
             "command": "clang-format -i -style=mozilla ${file}"

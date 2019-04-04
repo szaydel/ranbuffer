@@ -14,21 +14,21 @@ ifeq ($(uname_S),SunOS)
 endif
 ifeq ($(uname_S),Linux)
 	LDFLAGS=$(shell pkg-config --libs libsodium) -lpthread -luuid -lrt -lpthread -lnsl -ldl
+	PROGNAME=ranbuffer.linux
 endif
 ifeq ($(uname_S),Darwin)
 	LDFLAGS=$(shell pkg-config --libs libsodium) -lpthread -luuid -lpthread -ldl
 	LDFLAGS_NO_SODIUM=-lpthread -luuid -lpthread -ldl
+	PROGNAME=ranbuffer.macosx
 endif
 ifeq ($(uname_S),SunOS)
 	LDFLAGS=/usr/local/lib/libsodium.a -lssp -luuid -lpthread -ldl
+	PROGNAME=ranbuffer.solaris
 endif
-objects = genfile.o units.o ranbuffer.o
+objects = name.o thread.o genfile.o units.o ranbuffer.o
 
 ranbuffer: $(objects)
-		$(CC) $(CFLAGS) $(objects) $(LDFLAGS) -o ranbuffer
-
-ranbuffer-solaris: $(objects)
-		$(CC) $(CFLAGS) $(objects) $(LDFLAGS) -o ranbuffer.solaris
+		$(CC) $(CFLAGS) $(objects) $(LDFLAGS) -o $(PROGNAME)
 
 ranbuffer-static-libsodium: $(objects)
 		$(CC) $(CFLAGS) libsodium.a $(objects) \

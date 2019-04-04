@@ -11,113 +11,19 @@
 #include <unistd.h>
 
 #include <sodium.h>
-#include <uuid/uuid.h>
+
+#include "genfile.h"
+#include "name.h"
+#include "thread.h"
 
 #ifndef NUM_THREADS
 #define NUM_THREADS 4
 #endif
 #define WORKING_DIRECTORY "."
-#define UUID_BYTES 37
 #define RANDOM_DATA_BUFSIZE 1L << 20
-
-typedef struct thread_data
-{
-  char* directory;
-  double margin_of_error;
-  size_t min_file_size;
-  size_t max_file_size;
-  size_t total_data;
-  size_t file_count;
-  size_t written;
-  size_t bufsz;
-  void* buf;
-  unsigned suffix;
-  unsigned verbose;
-} thread_data_t;
 
 extern ssize_t
 string_to_bytes(const char* arg);
-static const char*
-random_filename(char* name, size_t len);
-ssize_t
-generate_file(char* path, void* buf, size_t bufsz, size_t nbytes);
-
-static const char*
-random_filename(char* name, size_t len)
-{
-  uuid_t uu;
-#if defined __APPLE__
-  uuid_string_t uu_str;
-  uuid_string_t p_name;
-#elif defined (__sun) || defined (__gnu_linux__)
-  char uu_str[UUID_BYTES];
-  char p_name[UUID_BYTES];
-#endif
-  uuid_generate_random(uu);
-#if defined (__sun) || defined (__gnu_linux__)
-  uuid_unparse_lower(uu, (char*)uu_str);
-  strncpy(p_name, (const char*)uu_str, len);
-#else
-  uuid_unparse_lower(uu, uu_str);
-  strncpy(p_name, uu_str, len);
-#endif
-  char* p = name;
-  // We walk over the p_name array and skip hyphens '-', copying everything
-  // else.
-  for (size_t i = 0; i < strlen(p_name); i++) {
-    if (p_name[i] == '-')
-      continue;
-    *p = p_name[i];
-    p++;
-  }
-  *p = '\0';
-  return name;
-}
-
-void*
-io_thread(void* arg)
-{
-  thread_data_t* td = (thread_data_t*)arg;
-  char* path = malloc(pathconf(td->directory, _PC_PATH_MAX) * sizeof(char));
-  if (path == NULL) {
-    fprintf(stderr,
-      "thread[%u] Failed to allocate path, " \
-      "directory name may not exist\n", td->suffix);
-      return NULL;
-  }
-  char name[37];
-  uint32_t r;
-  td->file_count = 0;
-  td->written = 0;
-  while (td->written <
-         ((double)(td->total_data) * td->margin_of_error) + td->total_data) {
-    r = randombytes_uniform(td->max_file_size);
-    if (r < td->min_file_size) {
-      r += td->min_file_size;
-    }
-    random_filename(name, 37);
-
-    sprintf(path, "%s/%s.%u", td->directory, name, td->suffix);
-#ifdef DEBUG
-    fprintf(stderr, "DEBUG: %s\n", path);
-#endif
-    ssize_t written = generate_file(path, td->buf, td->bufsz, r);
-
-    if (written == -1) {
-      char* err;
-      asprintf(&err, "Failed to write data into %s", path);
-      perror(err);
-      free(err);
-      free(path);
-      return NULL;
-    }
-    td->written += written;
-    ++td->file_count;
-  }
-
-  free(path);
-  return arg;
-}
 
 int
 main(int argc, char** argv)

@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "genfile.h"
+
 ssize_t
 generate_file(char* path, void* buf, size_t bufsz, size_t nbytes)
 {
