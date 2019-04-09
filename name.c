@@ -14,12 +14,12 @@ random_filename(char* name, size_t len)
 #if defined __APPLE__
   uuid_string_t uu_str;
   uuid_string_t p_name;
-#elif defined (__sun) || defined (__gnu_linux__)
+#elif defined(__sun) || defined(__gnu_linux__)
   char uu_str[UUID_BYTES];
   char p_name[UUID_BYTES];
 #endif
   uuid_generate_random(uu);
-#if defined (__sun) || defined (__gnu_linux__)
+#if defined(__sun) || defined(__gnu_linux__)
   uuid_unparse_lower(uu, (char*)uu_str);
   strncpy(p_name, (const char*)uu_str, len);
 #else

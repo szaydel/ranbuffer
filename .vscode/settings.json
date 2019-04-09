@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "sodium.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "genbuf.h": "c"
     }
 }

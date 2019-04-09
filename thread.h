@@ -3,7 +3,8 @@
 
 #include <unistd.h>
 
-void* io_thread(void* arg);
+void*
+io_thread(void* arg);
 
 typedef struct thread_data
 {

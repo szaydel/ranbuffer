@@ -31,9 +31,10 @@ io_thread(void* arg)
   char* path = malloc(pathconf(td->directory, _PC_PATH_MAX) * sizeof(char));
   if (path == NULL) {
     fprintf(stderr,
-      "thread[%u] Failed to allocate path, " \
-      "directory name may not exist\n", td->suffix);
-      return NULL;
+            "thread[%u] Failed to allocate path, "
+            "directory name may not exist\n",
+            td->suffix);
+    return NULL;
   }
   char name[37];
   uint32_t r;

@@ -5,5 +5,6 @@
 
 #define UUID_BYTES 37
 
-const char* random_filename(char* name, size_t len);
+const char*
+random_filename(char* name, size_t len);
 #endif // !NAME_H

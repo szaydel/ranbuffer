@@ -1,19 +1,26 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
-typedef enum {
-  INVALID = -1, B, KB, MB, GB, TB,
+typedef enum
+{
+  INVALID = -1,
+  B,
+  KB,
+  MB,
+  GB,
+  TB,
 } unit_t;
 
 size_t units[5] = {
-  [B] = 1L, [KB] = 1L<<10, [MB] = 1L<<20,
-  [GB] = 1L<<30, [TB] = 1L<<40,
+  [B] = 1L, [KB] = 1L << 10, [MB] = 1L << 20, [GB] = 1L << 30, [TB] = 1L << 40,
 };
 
-ssize_t string_to_bytes(const char *arg) {
+ssize_t
+string_to_bytes(const char* arg)
+{
   char unitc = '\0';
   size_t intval = 0;
   unit_t parsed_unit = INVALID;
@@ -21,37 +28,44 @@ ssize_t string_to_bytes(const char *arg) {
     return -1;
   }
 
-  char *numeric_prefix = calloc(strlen(arg), sizeof(char));
+  char* numeric_prefix = calloc(strlen(arg), sizeof(char));
   if (!numeric_prefix) {
     perror("Failed to allocate memory for string");
     return -1;
   }
 
-  for (size_t i = 0; i < strlen(arg) && unitc == '\0' ; i++) {
+  for (size_t i = 0; i < strlen(arg) && unitc == '\0'; i++) {
     if (isdigit(arg[i])) {
       numeric_prefix[i] = arg[i];
       continue;
     }
-    // We only care about the first character here, so tb, TB, t, or T are all same.
+    // We only care about the first character here, so tb, TB, t, or T are all
+    // same.
     unitc = arg[i];
 
     // Extract a number from numeric string.
     intval = (size_t)atoll(numeric_prefix);
-    if (!intval) return -1;
+    if (!intval)
+      return -1;
     switch (arg[i]) {
-      case 'b': case 'B':
+      case 'b':
+      case 'B':
         parsed_unit = B;
         break;
-      case 'k': case 'K':
+      case 'k':
+      case 'K':
         parsed_unit = KB;
         break;
-      case 'm': case 'M':
+      case 'm':
+      case 'M':
         parsed_unit = MB;
         break;
-      case 'g': case 'G':
+      case 'g':
+      case 'G':
         parsed_unit = GB;
         break;
-      case 't': case 'T':
+      case 't':
+      case 'T':
         parsed_unit = TB;
         break;
       default:
@@ -60,7 +74,8 @@ ssize_t string_to_bytes(const char *arg) {
 
     break;
   }
-  if (parsed_unit == INVALID) return INVALID;
+  if (parsed_unit == INVALID)
+    return INVALID;
   return intval * units[parsed_unit];
 }
 

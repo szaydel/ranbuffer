@@ -12,15 +12,21 @@
 
 #include <sodium.h>
 
+#include "genbuf.h"
 #include "genfile.h"
 #include "name.h"
 #include "thread.h"
+#include "validate.h"
 
 #ifndef NUM_THREADS
 #define NUM_THREADS 4
 #endif
 #define WORKING_DIRECTORY "."
+#define MAXIMUM_FILE_SIZE 1L << 40
+#define MINIMUM_FILE_SIZE 16L << 10
 #define RANDOM_DATA_BUFSIZE 1L << 20
+#define RANDOM_DATA_BUFSIZE_MAX 100L << 20
+#define RANDOM_DATA_BUFSIZE_MIN 1L << 20
 
 extern ssize_t
 string_to_bytes(const char* arg);
@@ -32,22 +38,38 @@ main(int argc, char** argv)
   size_t total_data = 100L << 20; // 100MB
   size_t min_file = 1L << 20;     // 1MB
   size_t max_file = min_file * 10;
+  size_t rand_buffer_size =
+    RANDOM_DATA_BUFSIZE_MIN; // Size of random data buffer
+
   double margin_of_error = 0.05;
   char* path = NULL;
   int retcode = 0;
   int c;
   opterr = 0;
-  while ((c = getopt(argc, argv, ":hm:t:")) != EOF) {
+  while ((c = getopt(argc, argv, ":hl:t:u:")) != EOF) {
     switch (c) {
       case 'h':
+        fprintf(stderr, "Usage: %s [OPTION]... <path>\n", argv[0]);
         fprintf(stderr,
-                "Usage: %s [ -m max file size ]"
-                "[ -t total size ] <path>\n",
-                argv[0]);
-        fprintf(stderr, "       Size Units: B, K, KB, M, MB, G, GB, T, TB\n");
+                "\nOptions:\n"
+                "  -l <SIZE>\t\tLower limit on file size\n"
+                "  -u <SIZE>\t\tUpper limit on file size\n"
+                "  -t <SIZE>\t\tAggregate (total) file size\n"
+                "\n\nThe SIZE argument is an integer with an optional unit."
+                "\nSIZE Units: B,K,KB,M,MB,G,GB,T,TB\n");
         return 2;
         break;
-      case 'm':
+      case 'l':
+        // Minimum file size should be no less than 2 * sqrt of maximum
+        // and not larger than 1/2 of maximum, that is,
+        // min_file >= 2*sqrt(max_file) and max_file >= min_file*2.
+        min_file = string_to_bytes(optarg);
+        if (min_file == -1) {
+          fprintf(stderr, "Error: failed to parse minimum file size\n");
+          return 1;
+        }
+        break;
+      case 'u':
         // Maximum file size should be at least 2x that of minimum, i.e.
         // max_file >= min_file*2.
         max_file = string_to_bytes(optarg);
@@ -55,8 +77,6 @@ main(int argc, char** argv)
           fprintf(stderr, "Error: failed to parse maximum file size\n");
           return 1;
         }
-        if (max_file < min_file * 2)
-          max_file = min_file * 2;
         break;
       case 't':
         total_data = string_to_bytes(optarg);
@@ -65,6 +85,14 @@ main(int argc, char** argv)
         fprintf(stderr, "Unrecognized option: '-%c'\n", optopt);
     }
   }
+
+  max_file = adjust_max_filesize(max_file);
+  min_file = adjust_min_filesize(min_file, max_file);
+
+#ifdef DEBUG
+  printf("max_file => %zu | min_file => %zu\n", max_file, min_file);
+  exit(0);
+#endif
 
   // Remaining arguments are assumed to be path(s).
   // Since only a single path is supported, ignore anything
@@ -85,13 +113,27 @@ main(int argc, char** argv)
   }
 
   if (sodium_init() < 0) {
+    fprintf(stderr, "Error: failed to initialize random number generator\n");
     return 1;
   }
 
-  void* buf = malloc(RANDOM_DATA_BUFSIZE);
+  // Compute size of random data buffer, limiting lower threshold by
+  // RANDOM_DATA_BUFSIZE_MIN, and upper threshold by RANDOM_DATA_BUFSIZE_MAX.
+  // In other words random data buffer length will be within
+  // range(RANDOM_DATA_BUFSIZE_MIN, RANDOM_DATA_BUFSIZE_MAX);
+  if (min_file < RANDOM_DATA_BUFSIZE_MIN) {
+    rand_buffer_size = RANDOM_DATA_BUFSIZE_MIN;
+  } else if (min_file > RANDOM_DATA_BUFSIZE_MAX) {
+    rand_buffer_size = RANDOM_DATA_BUFSIZE_MAX;
+  } else {
+    rand_buffer_size = min_file;
+  }
+  void* buf = malloc(rand_buffer_size);
   if (buf == NULL) {
     perror("Failed to allocate memory!");
     return 1;
+  } else {
+    random_fill_buffer(buf, rand_buffer_size);
   }
 
   pthread_t** threads = NULL;
@@ -147,7 +189,7 @@ main(int argc, char** argv)
   }
 
   for (size_t i = 0; i < NUM_THREADS; i++) {
-    void *arg = NULL;
+    void* arg = NULL;
     pthread_join(*threads[i], &arg);
     // If arg here is NULL, something went wrong in the thread.
     // In this instance set return code to 1 to indicate program
@@ -159,9 +201,9 @@ main(int argc, char** argv)
     // Produce final statistics and free resources,
     // though freeing here does not really matter.
     printf("thread[%zu] generated %zu files, averaging %zuMB/file\n",
-        i,
-        params[i]->file_count,
-        (params[i]->written / params[i]->file_count) >> 20);
+           i,
+           params[i]->file_count,
+           (params[i]->written / params[i]->file_count) >> 20);
     free(params[i]);
     free(threads[i]);
   }
