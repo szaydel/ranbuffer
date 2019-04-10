@@ -62,10 +62,11 @@ generate_file(char* path, void* buf, size_t bufsz, size_t nbytes)
   }
 
   int result;
-  again:
+again:
   result = close(fd);
   if (result < 0) {
-    if (errno == EINTR) goto again;
+    if (errno == EINTR)
+      goto again;
     else {
       char* err;
       asprintf(&err, "Failed to close %s", path);

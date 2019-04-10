@@ -37,12 +37,11 @@ io_thread(void* arg)
     return NULL;
   }
   char name[37];
-  uint32_t r;
   td->file_count = 0;
   td->written = 0;
   while (td->written <
          ((double)(td->total_data) * td->margin_of_error) + td->total_data) {
-    r = randombytes_uniform(td->max_file_size);
+    uint32_t r = randombytes_uniform(td->max_file_size);
     if (r < td->min_file_size) {
       r += td->min_file_size;
     }

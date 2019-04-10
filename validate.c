@@ -5,13 +5,13 @@
 #include "validate.h"
 
 size_t
-adjust_max_filesize(size_t n)
+adjust_max_filesize(size_t max)
 {
-  if (n < MINIMUM_FILE_SIZE)
+  if (max < MINIMUM_FILE_SIZE)
     return MINIMUM_FILE_SIZE;
-  if (n > MAXIMUM_FILE_SIZE)
+  if (max > MAXIMUM_FILE_SIZE)
     return MAXIMUM_FILE_SIZE;
-  return n;
+  return max;
 }
 
 size_t
