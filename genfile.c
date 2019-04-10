@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <errno.h>
+
 #include "genfile.h"
 
 ssize_t
@@ -57,6 +59,19 @@ generate_file(char* path, void* buf, size_t bufsz, size_t nbytes)
     }
     written += result;
     remainder = nbytes - written;
+  }
+
+  int result;
+  again:
+  result = close(fd);
+  if (result < 0) {
+    if (errno == EINTR) goto again;
+    else {
+      char* err;
+      asprintf(&err, "Failed to close %s", path);
+      perror(err);
+      free(err);
+    }
   }
   return written;
 }
