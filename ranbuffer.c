@@ -34,7 +34,7 @@ string_to_bytes(const char* arg);
 int
 main(int argc, char** argv)
 {
-  // These will have to come from command line arguments at some point
+  size_t thread_count = NUM_THREADS; // Adjustable parallel threads
   size_t total_data = 100L << 20; // 100MB
   size_t min_file = 1L << 20;     // 1MB
   size_t max_file = min_file * 10;
@@ -46,18 +46,26 @@ main(int argc, char** argv)
   int retcode = 0;
   int c;
   opterr = 0;
-  while ((c = getopt(argc, argv, ":hl:t:u:")) != EOF) {
+  while ((c = getopt(argc, argv, ":hl:p:t:u:")) != EOF) {
     switch (c) {
       case 'h':
         fprintf(stderr, "Usage: %s [OPTION]... <path>\n", argv[0]);
         fprintf(stderr,
                 "\nOptions:\n"
+                "  -p <COUNT>\t\tNumber of parallel threads\n"
                 "  -l <SIZE>\t\tLower limit on file size\n"
                 "  -u <SIZE>\t\tUpper limit on file size\n"
                 "  -t <SIZE>\t\tAggregate (total) file size\n"
                 "\n\nThe SIZE argument is an integer with an optional unit."
                 "\nSIZE Units: B,K,KB,M,MB,G,GB,T,TB\n");
         return 2;
+        break;
+      case 'p':
+        thread_count = atol(optarg);
+        if (thread_count < 1)
+          thread_count = NUM_THREADS;
+        else if (thread_count > NUM_THREADS * 10)
+          thread_count = NUM_THREADS;
         break;
       case 'l':
         // Minimum file size should be no less than 2 * sqrt of maximum
@@ -139,18 +147,18 @@ main(int argc, char** argv)
   pthread_t** threads = NULL;
   thread_data_t** params = NULL;
 
-  threads = malloc(sizeof(pthread_t*) * NUM_THREADS);
+  threads = malloc(sizeof(pthread_t*) * thread_count);
   if (threads == NULL) {
     perror("Unable to allocate threads array");
     return 1;
   }
-  params = malloc(sizeof(thread_data_t*) * NUM_THREADS);
+  params = malloc(sizeof(thread_data_t*) * thread_count);
   if (params == NULL) {
     perror("Unable to allocate params array");
     return 1;
   }
 
-  for (size_t i = 0; i < NUM_THREADS; i++) {
+  for (size_t i = 0; i < thread_count; i++) {
     params[i] = (thread_data_t*)malloc(sizeof(thread_data_t));
     if (params[i] == NULL) {
       perror("Unable to allocate new thread context structure");
@@ -168,13 +176,13 @@ main(int argc, char** argv)
     params[i]->margin_of_error = margin_of_error;
     params[i]->min_file_size = min_file;
     params[i]->max_file_size = max_file;
-    params[i]->total_data = total_data / NUM_THREADS;
-    params[i]->bufsz = RANDOM_DATA_BUFSIZE;
+    params[i]->total_data = total_data / thread_count;
+    params[i]->bufsz = rand_buffer_size;
     params[i]->buf = buf;
     params[i]->suffix = i;
   }
 
-  for (size_t i = 0; i < NUM_THREADS; i++) {
+  for (size_t i = 0; i < thread_count; i++) {
     threads[i] = (pthread_t*)malloc(sizeof(pthread_t));
     if (threads[i] == NULL) {
       perror("Unable to allocate new thread");
@@ -188,7 +196,7 @@ main(int argc, char** argv)
     }
   }
 
-  for (size_t i = 0; i < NUM_THREADS; i++) {
+  for (size_t i = 0; i < thread_count; i++) {
     void* arg = NULL;
     pthread_join(*threads[i], &arg);
     // If arg here is NULL, something went wrong in the thread.
@@ -200,10 +208,23 @@ main(int argc, char** argv)
     }
     // Produce final statistics and free resources,
     // though freeing here does not really matter.
-    printf("thread[%zu] generated %zu files, averaging %zuMB/file\n",
-           i,
-           params[i]->file_count,
-           (params[i]->written / params[i]->file_count) >> 20);
+    if ((params[i]->written / params[i]->file_count) > (1L << 30)) {
+      printf("thread[%zu] generated %zu files, averaging %zuGB/file\n",
+             i,
+             params[i]->file_count,
+             (params[i]->written / params[i]->file_count) << 30);
+    } else if ((params[i]->written / params[i]->file_count) >
+               (size_t)(1 << 20)) {
+      printf("thread[%zu] generated %zu files, averaging %zuMB/file\n",
+             i,
+             params[i]->file_count,
+             (params[i]->written / params[i]->file_count) >> 20);
+    } else {
+      printf("thread[%zu] generated %zu files, averaging %zuKB/file\n",
+             i,
+             params[i]->file_count,
+             (params[i]->written / params[i]->file_count) >> 10);
+    }
     free(params[i]);
     free(threads[i]);
   }
